@@ -87,7 +87,7 @@ function module.transformInstancePathToValid(instance: ModuleScript | Instance, 
 			lastImportWasTransformed = false
 		end
 
-		parent = parent.Parent :: ModuleScript -- isnt exclusive to ModuleScript but stops type solver from crying
+		parent = parent.Parent :: ModuleScript | Instance
 	end
 
 	local lastAncestorName = if didNotUseService then prefix else module.processVariableName(lastAncestor.Name, 1)
@@ -100,7 +100,7 @@ function module.transformInstancePathToValid(instance: ModuleScript | Instance, 
 	return newImportPath, didNotUseService
 end
 
-function module.getNameOfImportedItemFromDeclaration(declaration: string): string?
+function module.getNameOfImportedItemFromDeclaration(declaration: string): string
 	local itemNameResult: { string } = {}
 
 	local function walkBackUntil(terminator: string, offset: number): ()
@@ -116,20 +116,17 @@ function module.getNameOfImportedItemFromDeclaration(declaration: string): strin
 		end
 	end
 
-	local secondLast: string = string.sub(declaration, -2, -2)
+	local offset: number = 0
 	if string.sub(declaration, -1) == ")" then
-		if secondLast ~= "]" then
-			walkBackUntil(".", 1)
-		else
-			walkBackUntil("\"", 3)
-		end
-	else
-		if secondLast ~= "]" then
-			walkBackUntil(".", 0)
-		else
-			walkBackUntil("\"", 0)
-		end
+		offset = 1
 	end
+	if string.sub(declaration, -2, -2) ~= "]" then
+		-- .NAME
+		walkBackUntil(".", offset)
+	else
+		-- ["NAME"]
+		walkBackUntil("\"", offset + 2)
+	end	
 
 	return table.concat(itemNameResult)
 end
@@ -139,15 +136,27 @@ function module.getNeededServiceNameToImportFromModuleOrInstance(instance: Modul
 	local neutralServiceImport: string = module.asNeutralImportName(`local {module.processVariableName(serviceName, 1)} = game:GetService("{serviceName}")`)
 
 	for _, alreadyImportedService in lastServiceImportGroup.all do
-		if string.find(neutralServiceImport, serviceName) then
-			return nil
-		end
-		if module.asNeutralImportName(string.lower(alreadyImportedService)) == string.lower(alreadyImportedService) then
+		if string.find(alreadyImportedService, serviceName) then
 			return nil
 		end
 	end
 
 	return serviceName
+end
+
+function module.getVariableNameFromLine(lineContents: string): string
+	local variableName: { string } = {}
+ 	
+	for i = 7, #lineContents do
+		local character: string = string.sub(lineContents, i, i)
+		if character == " " or character == "=" then
+			break
+		end
+
+		variableName[i - 6] = character
+	end
+	
+	return table.concat(variableName)
 end
 
 return module
