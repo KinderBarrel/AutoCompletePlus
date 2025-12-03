@@ -15,7 +15,7 @@ end
 
 local Types = require(script.Types)
 
-print("Running AutoComplete+ v1.13.1. View ROSS server for update info.")
+print("Running AutoComplete+ v1.13.2. View ROSS server for update info.")
 
 local pluginGlobalIndex: Types.pluginGlobalIndex = _G["AutoComplete+"]
 
@@ -40,9 +40,9 @@ local NO_IMPORT_TAG: string = "_NoImport"
 local CLIENT_ONLY_TAG: string = "_ClientOnly"
 local IMPORTABLE_TAG: string = "_Importable"
 local MAXIMUM_LINES_TO_PARSE: number = 100
-local SERVICE_PREFIX: string = "~"
-local MODULE_PREFIX: string = ";"
-local INSTANCE_PREFIX: string = ">"
+local SERVICE_PREFIX: string = "[~]"
+local MODULE_PREFIX: string = "[;]"
+local INSTANCE_PREFIX: string = "[>]"
 local DUPLICATE_MODULE_IDENTIFIER: string = "+"
 
 local services: { [string]: string } = {
@@ -369,9 +369,9 @@ local function import(document: ScriptDocument, importName: string, importType: 
 		end
 
 		local nextLineNumber: number = importGroupStartLine + #lastImportGroup.group - 1
-		local nextLine: string? = (i == 1 and documentLines or string.split(document:GetText(), "\n"))[nextLineNumber]
+		local nextLine: string? = documentLines[nextLineNumber]
 
-		if nextLine and #nextLine > 0 and not string.find(nextLine, importName) then
+		if nextLine and #nextLine > 0 and not (i == importType and string.find(nextLine, importName)) then
 			-- if there exists content at point of import, move it up so it doesn't get erased
 			if i == 1 then
 				serviceImportMovedLine = true
@@ -384,7 +384,9 @@ local function import(document: ScriptDocument, importName: string, importType: 
 		end
 
 		lastDocumentLineCount = document:GetLineCount()
+		
 		document:EditTextAsync(text, importGroupStartLine, 1, math.min(importGroupStartLine + #lastImportGroup.group, lastDocumentLineCount), 1)
+		documentLines = string.split(document:GetText(), "\n")
 	end
 
 	-- return the number of lines added to the document
@@ -599,7 +601,6 @@ ScriptEditorService:RegisterAutocompleteCallback("AutoComplete", 1, function(loc
 	return existingSuggestions
 end)
 
-local lastWasUndone: boolean = false
 table.insert(pluginGlobalIndex.Connections, ScriptEditorService.TextDocumentDidChange:Connect(function(document, changesArray: { { ["text"]: string, ["range"]: { ["end"]: Types.subRange, ["start"]: Types.subRange } } })
 	if document:IsCommandBar() then
 		return
@@ -613,48 +614,43 @@ table.insert(pluginGlobalIndex.Connections, ScriptEditorService.TextDocumentDidC
 		return
 	end
 
-	local firstCharacter: string = string.sub(change.text, 1, 1)
-	if firstCharacter ~= SERVICE_PREFIX and firstCharacter ~= MODULE_PREFIX and firstCharacter ~= INSTANCE_PREFIX then
+	local firstThreeCharacters: string = string.sub(change.text, 1, 3)
+	local importType: number
+	if firstThreeCharacters == SERVICE_PREFIX then
+		importType = 1
+	elseif firstThreeCharacters == MODULE_PREFIX then
+		importType = 2
+	elseif firstThreeCharacters == INSTANCE_PREFIX then
+		importType = 3
+	else
 		return
 	end
 
-	local importWhat: string = string.sub(change.text, 2, textLength)
+	local importWhat: string = string.sub(change.text, 4, textLength)
 	local lines: { string } = string.split(document:GetText(), "\n")
 	local selectedLine: number = document:GetSelection()
 
-	if lastWasUndone and (#lines == 1 or string.find(lines[1], importWhat, 1, true)) then
-		lastWasUndone = false
+	if selectedLine ~= change.range.start.line then
+		-- Undo check 1
 		return
 	end
-
-	local currentLineContents: string = lines[change.range.start.line]
-	local importType: number
-	if firstCharacter == SERVICE_PREFIX then
-		importType = 1
-	elseif firstCharacter == MODULE_PREFIX then
-		importType = 2
-	elseif firstCharacter == INSTANCE_PREFIX then
-		importType = 3
-	end
-
 	for line, lineContents in lines do
 		if line > MAXIMUM_LINES_TO_PARSE or line > selectedLine then
 			break
 		end
 
 		if string.find(lineContents, `local {Transformers.processVariableName(importWhat, importType)} =`, 1, true) then
-			lastWasUndone = true
-			-- User just did an undo
+			-- Undo check 2
 			return
 		end
 	end
-	lastWasUndone = false
 	
 	local padding: number? = import(document, importWhat, importType)
 	if not padding then
 		return
 	end
 	
+	local currentLineContents: string = lines[change.range.start.line]
 	local newLine: number = change.range.start.line + padding
 	local findStart: number?, findEnd: number? = string.find("^" .. Transformers.asNeutralImportName(currentLineContents), Transformers.asNeutralImportName(change.text))
 	if not findStart or not findEnd then
