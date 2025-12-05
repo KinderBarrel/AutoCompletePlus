@@ -15,7 +15,7 @@ end
 
 local Types = require(script.Types)
 
-print("Running AutoComplete+ v1.13.2. View ROSS server for update info.")
+print("Running AutoComplete+ v1.13.3. View ROSS server for update info.")
 
 local pluginGlobalIndex: Types.pluginGlobalIndex = _G["AutoComplete+"]
 
@@ -198,7 +198,7 @@ local function import(document: ScriptDocument, importName: string, importType: 
 			break
 		end
 
-		if not lastModuleImportGroup.startLine and not lastServiceImportGroup.startLine and (commentBlocks > 0 or string.find(lineContents, "%-%-")) then
+		if (not lastModuleImportGroup.startLine and not lastServiceImportGroup.startLine) and (commentBlocks > 0 or string.sub(lineContents, 1, 2) == "--") then
 			if string.find(lineContents, "%-%-%[%[") then
 				commentBlocks += 1
 			end
@@ -211,7 +211,7 @@ local function import(document: ScriptDocument, importName: string, importType: 
 		if string.sub(lineContents, 1, 1) == "	" then
 			continue
 		end
-
+		
 		local serviceMatch = string.match(lineContents, 'local[%s%w_]+%s=%sgame:GetService%("%w+"%)')
 		local moduleMatch = string.match(lineContents, 'local[%s%w_]+%s=%srequire%([%w%p%s]+%)') or string.match(lineContents, 'require%([%w%p%s]+%)')
 		local existingImport = serviceMatch or moduleMatch
